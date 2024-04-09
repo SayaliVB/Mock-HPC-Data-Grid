@@ -1,1 +1,1 @@
-# Mock-HPC-lab---Data-Grid
+# Mock-HPC Data-Grid
