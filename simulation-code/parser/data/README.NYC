@@ -1,0 +1,14 @@
+# NYC Open Data Project
+
+There is a wealth of free data from New York City that you can use for testing,  
+
+https://data.cityofnewyork.us
+
+The NYC traffic ticket data provides an opportunity to look at dense data set of 
+small record size. This contrasts with large data records such as imagery or
+binary data.
+
+The data is raw, direct from the city of New York. With raw data there are quality
+and noise within the data set. You will need to take this into account while working
+with the data.
+
