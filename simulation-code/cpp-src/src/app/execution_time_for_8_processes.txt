@@ -1,0 +1,7 @@
+Process Rank: 7, Records processed: 167552, Execution time: 7.85718s, Records per second: 21324.7
+Process Rank: 1, Records processed: 169386, Execution time: 7.86556s, Records per second: 21535.2
+Process Rank: 3, Records processed: 171806, Execution time: 7.88826s, Records per second: 21780
+Process Rank: 4, Records processed: 169817, Execution time: 7.8897s, Records per second: 21523.9
+Process Rank: 6, Records processed: 169722, Execution time: 7.89193s, Records per second: 21505.8
+Process Rank: 5, Records processed: 169565, Execution time: 7.90613s, Records per second: 21447.3
+Process Rank: 2, Records processed: 149677, Execution time: 7.91068s, Records per second: 18920.9

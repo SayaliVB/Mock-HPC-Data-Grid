@@ -1,0 +1,3 @@
+Process Rank: 3, Records processed: 388974, Execution time: 9.21649s, Records per second: 42204.1
+Process Rank: 2, Records processed: 389330, Execution time: 9.252s, Records per second: 42080.6
+Process Rank: 1, Records processed: 389221, Execution time: 9.26128s, Records per second: 42026.7

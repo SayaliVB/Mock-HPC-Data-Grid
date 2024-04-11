@@ -1,0 +1,12 @@
+
+Process Rank: 9, Records processed: 106134, Execution time: 6.88488s, Records per second: 15415.5
+Process Rank: 10, Records processed: 104192, Execution time: 6.89893s, Records per second: 15102.6
+Process Rank: 1, Records processed: 104208, Execution time: 6.91701s, Records per second: 15065.5
+Process Rank: 7, Records processed: 104019, Execution time: 6.94341s, Records per second: 14981
+Process Rank: 2, Records processed: 106364, Execution time: 6.94611s, Records per second: 15312.7
+Process Rank: 8, Records processed: 108463, Execution time: 6.94957s, Records per second: 15607.2
+Process Rank: 3, Records processed: 106465, Execution time: 6.95287s, Records per second: 15312.4
+Process Rank: 6, Records processed: 106408, Execution time: 6.96127s, Records per second: 15285.7
+Process Rank: 4, Records processed: 106351, Execution time: 6.96134s, Records per second: 15277.4
+Process Rank: 5, Records processed: 106435, Execution time: 6.97433s, Records per second: 15261
+Process Rank: 11, Records processed: 108486, Execution time: 7.0078s, Records per second: 15480.7
