@@ -4,11 +4,10 @@
 #include <vector>
 #include <string>
 #include <mpi.h>
-#include <map>
 #include <dirent.h>
 
 
-int verbose = 2;
+int verbose = 3;
 
 struct AirQualityData {
     double latitude;
@@ -137,9 +136,7 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
             }
             entry.concentration =  0.0; 
         }
-        if (entry.concentration == -999) {
-            continue; // Skip the remaining part of the loop iteration
-        }
+
 
         std::getline(iss, entry.unit, ',');
         entry.unit = entry.unit.substr(1, entry.unit.size() - 2);
@@ -154,9 +151,6 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
                 std::cerr << token << " -> Invalid argument rawConcentration: " << e.what() << std::endl;
             }
             entry.rawConcentration =  0.0; 
-        }
-        if (entry.rawConcentration == -999) {
-            continue; // Skip the remaining part of the loop iteration
         }
 
         std::getline(iss, token, ',');
@@ -183,10 +177,6 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
             entry.category =  0.0; 
         }
 
-        if (entry.category == -999) {
-            continue; // Skip the remaining part of the loop iteration
-        }
-
         std::getline(iss, entry.sName, ',');
         entry.sName = entry.sName.substr(1, entry.sName.size() - 2);
 
@@ -209,49 +199,13 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
     return data;
 }
 
-std::string extract_date(const std::string& filepath) { 
-    // Find the position of the last occurrence of '/'
-    size_t last_slash_pos = filepath.rfind('/');
 
-    size_t last_dot_pos = filepath.rfind('.');
-
-    // Extract the substring representing the date-time
-    std::string date_time = filepath.substr(last_slash_pos+1, last_dot_pos - last_slash_pos - 1);
-    
-    return date_time;
-}
-
-std::map<std::string, double> calculate_average(const std::vector<AirQualityData>& data) {
-    std::map<std::string, double> sums;
-    std::map<std::string, int> counts;
-    std::map<std::string, double> averages;
-
-
+double calculate_average(const std::vector<AirQualityData>& data) {
+    double total_concentration = 0.0;
     for (const auto& point : data) {
-        sums[point.pollutant] += point.concentration;
-        counts[point.pollutant]++;
+        total_concentration += point.concentration;
     }
-
-    for (const auto& pair : sums) {
-        averages[pair.first] = pair.second / counts[pair.first];
-    }
-
-    return averages;
-}
-
-void write_to_file(std::string data){
-    std::ofstream outfile("pollutant_avg.txt", std::ios::app);
-    if (!outfile.is_open()) {
-        std::cerr << "Error: Unable to open file for writing: pollutant_avg.txt" << std::endl;
-        return;
-    }
-    //outfile<< "Average concentration for date "<< extract_date(filename)<< std::endl;
-    
-    outfile << data << std::endl;
-    
-
-    outfile.close();
-
+    return total_concentration / data.size();
 }
 
 void execution_time(int rank, double start, double end, int records, int totprocess) {
@@ -292,7 +246,8 @@ int main(int argc, char *argv[]) {
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    std::map<std::string, double> partial_avgs;
+    //std::map<std::string, double> partial_averages;
+    double partial_average;
     if (rank == 0) {
         // Rank 0 reads the filenames and sends them to other ranks
 
@@ -318,26 +273,9 @@ int main(int argc, char *argv[]) {
             if (verbose >3)
                 std::cout << "Rank 0 sent file " << filenames[i-1] << "to  "<< i << std::endl;
         }
-        
-        std::ofstream outfile("pollutant_avg.txt", std::ios::out);
-        outfile.close();
-
-        
         for (int i = size-1; i < filenames.size(); ++i) {
             int ranktosend;
             MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
-
-            write_to_file(serialized_data);
-
             if (verbose >3)
                 std::cout << "Rank 0 remaining sending file " << filenames[i] << "to  "<< ranktosend << std::endl;
             MPI_Send(filenames[i].c_str(), filenames[i].size() + 1, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD);
@@ -346,18 +284,6 @@ int main(int argc, char *argv[]) {
         for (int i = 1; i < size; ++i) {
             int ranktosend;
             MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
-
-            write_to_file(serialized_data);
 
             if (verbose >3)
                 std::cout << "Rank 0 sending empty file to  "<< ranktosend << std::endl;
@@ -381,6 +307,11 @@ int main(int argc, char *argv[]) {
             }
             if (filename[0] == '\0') // Termination signal
             {
+                partial_average /=i;
+                if (verbose >2){
+                    //std::cout << "Rank " << rank << " partial average " << partial_averages.size() << std::endl;
+                    std::cout << "Rank " << rank << " partial average " << partial_average << std::endl;
+                }
                 auto endTime = std::chrono::high_resolution_clock::now();
                 execution_time(rank,  
                                 std::chrono::duration<double>(startTime.time_since_epoch()).count(),  
@@ -397,23 +328,35 @@ int main(int argc, char *argv[]) {
             }
 
             totRecords+=data.size();
-            partial_avgs = calculate_average(data);
+            // Calculate partial average
+            partial_average += calculate_average(data);
             
             
             MPI_Send(&rank, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            std::string serialized_data;
-            serialized_data +="Average concentration for date " + extract_date(filename) + "\n";
-            for (const auto& pair : partial_avgs) {
-                serialized_data += pair.first + ":" + std::to_string(pair.second) + "\n";
-            }
-            int size = serialized_data.size();
-            MPI_Send(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-
-            const char* cstr_data = serialized_data.c_str();
-            MPI_Send(cstr_data, size, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             i++;
         }
 
+    }
+
+
+    std::vector<double> all_partial_averages(size);
+    MPI_Gather(&partial_average, 1, MPI_DOUBLE, all_partial_averages.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // MPI_Send(partial_averages.data(), partial_averages.size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+
+    
+    if (rank ==0){
+        double total_concentration = 0.0;
+        int total_data_points = -1;
+        for (const auto& avg : all_partial_averages) {
+            if (verbose >2){
+                std::cout << " partial averages " << avg << std::endl;
+            }
+
+            total_concentration += avg;
+            total_data_points++;
+        }
+        double final_average = total_concentration / total_data_points;
+        std::cout << "Final average concentration: " << final_average << std::endl;
     }
     
     MPI_Finalize();
