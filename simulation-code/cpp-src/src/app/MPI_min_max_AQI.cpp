@@ -8,7 +8,7 @@
 #include <dirent.h>
 
 
-int verbose = 2;
+int verbose = 1;
 
 struct AirQualityData {
     double latitude;
@@ -171,6 +171,10 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
             entry.AQI =  0.0; 
         }
 
+        if (entry.AQI == 999) {
+            continue; // Skip the remaining part of the loop iteration
+        }
+
         std::getline(iss, token, ',');
         token = token.substr(1, token.size() - 2);
          try {
@@ -189,6 +193,10 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
 
         std::getline(iss, entry.sName, ',');
         entry.sName = entry.sName.substr(1, entry.sName.size() - 2);
+        if (entry.sName==""){
+            std::cout<<"Empty";
+            continue;
+        }
 
 
         std::getline(iss, entry.sAgency, ',');
@@ -221,41 +229,66 @@ std::string extract_date(const std::string& filepath) {
     return date_time;
 }
 
-std::map<std::string, double> calculate_average(const std::vector<AirQualityData>& data) {
-    std::map<std::string, double> sums;
-    std::map<std::string, int> counts;
-    std::map<std::string, double> averages;
 
+// int order: order =1  desc, order =0  asc
+std::vector<AirQualityData> find_min_site_names(const std::vector<AirQualityData>& aqiData, int n, int order) {
+    std::vector<AirQualityData> minSiteNames;
+    std::vector<AirQualityData> sortedAQIData = aqiData;
+    std::sort(sortedAQIData.begin(), sortedAQIData.end(), [order](const AirQualityData& a, const AirQualityData& b) {
+        return (order  == 0)? a.AQI < b.AQI : a.AQI > b.AQI;
+    });
 
-    for (const auto& point : data) {
-        sums[point.pollutant] += point.concentration;
-        counts[point.pollutant]++;
+    for (size_t i = 0; i < n && i < sortedAQIData.size(); ++i) {
+        minSiteNames.push_back(sortedAQIData[i]);
     }
 
-    for (const auto& pair : sums) {
-        averages[pair.first] = pair.second / counts[pair.first];
-    }
-
-    return averages;
+    return minSiteNames;
 }
 
-void write_to_file(std::string data){
-    std::ofstream outfile("pollutant_avg.txt", std::ios::app);
-    if (!outfile.is_open()) {
-        std::cerr << "Error: Unable to open file for writing: pollutant_avg.txt" << std::endl;
-        return;
+std::vector<char> serialize_air_quality_data(const std::vector<AirQualityData>& data) {
+    std::vector<char> serialized_data;
+
+    for (const auto& entry : data) {
+        // Serialize AQI
+        serialized_data.insert(serialized_data.end(), reinterpret_cast<const char*>(&entry.AQI), reinterpret_cast<const char*>(&entry.AQI) + sizeof(entry.AQI));
+
+        // Serialize sName (including null terminator)
+        serialized_data.insert(serialized_data.end(), entry.sName.begin(), entry.sName.end());
+        serialized_data.push_back('\0');
     }
-    //outfile<< "Average concentration for date "<< extract_date(filename)<< std::endl;
-    
-    outfile << data << std::endl;
-    
 
-    outfile.close();
+    return serialized_data;
+}
 
+// Function to deserialize a byte array into AQI and sName fields of AirQualityData objects
+std::vector<AirQualityData> deserialize_air_quality_data(const std::vector<char>& serialized_data) {
+    std::vector<AirQualityData> data;
+
+    size_t offset = 0;
+    while (offset < serialized_data.size()) {
+        AirQualityData entry;
+
+        // Deserialize AQI
+        std::memcpy(&entry.AQI, &serialized_data[offset], sizeof(entry.AQI));
+        offset += sizeof(entry.AQI);
+
+        // Deserialize sName
+        while (serialized_data[offset] != '\0') {
+            entry.sName.push_back(serialized_data[offset]);
+            ++offset;
+        }
+        // Move offset past the null terminator
+        ++offset;
+
+        // Add the deserialized entry to the data vector
+        data.push_back(entry);
+    }
+
+    return data;
 }
 
 void execution_time(int rank, double start, double end, int records, int totprocess) {
-    std::string filename = "execution_time_for_" + std::to_string(totprocess) + "_processes.txt";
+    std::string filename = "min_values_exe_time_for_" + std::to_string(totprocess) + "_processes.txt";
     std::ofstream metrics(filename, std::ios::app);
     
     // Check if the file opened successfully
@@ -292,7 +325,12 @@ int main(int argc, char *argv[]) {
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    std::map<std::string, double> partial_avgs;
+    std::vector<AirQualityData> all_minSiteNames; 
+
+    int noofrecords = std::atoi(argv[2]);
+    int order = std::atoi(argv[3]);
+
+
     if (rank == 0) {
         // Rank 0 reads the filenames and sends them to other ranks
 
@@ -319,25 +357,21 @@ int main(int argc, char *argv[]) {
                 std::cout << "Rank 0 sent file " << filenames[i-1] << "to  "<< i << std::endl;
         }
         
-        std::ofstream outfile("pollutant_avg.txt", std::ios::out);
-        outfile.close();
-
-        
         for (int i = size-1; i < filenames.size(); ++i) {
             int ranktosend;
             MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            int vector_size;
+            MPI_Recv(&vector_size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // Receive the entire vector
+            std::vector<char> received_data(vector_size);
+            MPI_Recv(received_data.data(), vector_size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            std::vector<AirQualityData> received_vector = deserialize_air_quality_data(received_data);
+            all_minSiteNames.insert(all_minSiteNames.end(), received_vector.begin(), received_vector.end());
 
             
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
-
-            write_to_file(serialized_data);
-
             if (verbose >3)
                 std::cout << "Rank 0 remaining sending file " << filenames[i] << "to  "<< ranktosend << std::endl;
             MPI_Send(filenames[i].c_str(), filenames[i].size() + 1, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD);
@@ -347,17 +381,16 @@ int main(int argc, char *argv[]) {
             int ranktosend;
             MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
+            int vector_size;
+            MPI_Recv(&vector_size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            write_to_file(serialized_data);
+            // Receive the entire vector
+            std::vector<char> received_data(vector_size);
+            MPI_Recv(received_data.data(), vector_size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            
+            std::vector<AirQualityData> received_vector = deserialize_air_quality_data(received_data);
+            all_minSiteNames.insert(all_minSiteNames.end(), received_vector.begin(), received_vector.end());
 
             if (verbose >3)
                 std::cout << "Rank 0 sending empty file to  "<< ranktosend << std::endl;
@@ -397,25 +430,42 @@ int main(int argc, char *argv[]) {
             }
 
             totRecords+=data.size();
-            partial_avgs = calculate_average(data);
             
             
             MPI_Send(&rank, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            std::string serialized_data;
-            serialized_data +="Average concentration for date " + extract_date(filename) + "\n";
-            for (const auto& pair : partial_avgs) {
-                serialized_data += pair.first + ":" + std::to_string(pair.second) + "\n";
-            }
-            int size = serialized_data.size();
-            MPI_Send(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            std::vector<AirQualityData> temp = find_min_site_names(data, noofrecords, order);
 
-            const char* cstr_data = serialized_data.c_str();
-            MPI_Send(cstr_data, size, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            std::vector<char> serialized_data = serialize_air_quality_data(temp);
+
+            int vector_size = serialized_data.size();
+            MPI_Send(&vector_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
+            // Send the entire vector
+            MPI_Send(serialized_data.data(), vector_size, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             i++;
         }
 
     }
-    
+
+    if (rank == 0) {
+        // Print the result
+        all_minSiteNames = find_min_site_names(all_minSiteNames,noofrecords, order);
+        std::cout << "5 Minimum Site Names for Maximum AQI Values:" << all_minSiteNames.size() << std::endl;
+        std::ofstream outfile("min_max_AQI.txt", std::ios::app);
+        if (outfile.is_open()) {
+            for (const auto& siteName : all_minSiteNames) {
+                std::cout << siteName.sName <<"  with AQI : " << siteName.AQI <<std::endl;
+                outfile << siteName.sName<<"  with AQI : " << siteName.AQI << std::endl;
+            }
+        }
+        else{
+            std::cerr << "Error: Unable to open file for writing: min_max_AQI.txt" << std::endl;
+        }
+
+        outfile.close();
+
+    }
+
     MPI_Finalize();
     return 0;
 }
