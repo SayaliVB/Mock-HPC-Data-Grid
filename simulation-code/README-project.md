@@ -27,14 +27,6 @@ techniques using:
    * Choice: **mpi4py** or py4mpi
 
 
-### Seed code
-
-Example/Seed code and data for parsing the NYC data is provided in 
-Java. However, as the above introduction eluded to, this mini is 
-C/C++ and some Python. The Java code should not be part of a team's
-solution.
-
-
 ### Tasks
 
 You will need to think many concepts. Here are some (not all) of the
@@ -48,24 +40,3 @@ concepts you will need to work on:
    * Scalability, using the MPI job scheduling/scaling to
      increase/decrease the number of processes. Is there a
      maximum or minimum number of processes?
-
-
-### Guidance and Collaboration
-
-This mini (tech) is going to require teams to step up previous inter-
-team collaboration efforts. 
-
-Unlike tech 1, where the provided code lent structure and guidence to 
-your end goals, tech 2 is the opposite. Seeking solutions and build a
-code base is left to the teams. Furthermore, goals are purposely more 
-abstract.
-
-I have not coded this project beforehand so, estimating the number of 
-hours is a bit harder. I would conservatively put it at 80-100 hours. 
-
-This is going to be orders of magnitude harder.
-
-
-### Deliverables
-
-Same as the previous mini/tech.
