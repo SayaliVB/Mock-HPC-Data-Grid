@@ -8,3 +8,53 @@ Reno4  with AQI : 0
 Oakland West  with AQI : 0
 Welby - 78th Ave. & Steele St.  with AQI : 0
 BELLFNT2  with AQI : 0
+Harvard Yards  with AQI : 0
+Indpls-Washington Park  with AQI : 0
+Mesa 2  with AQI : 0
+WATSON  with AQI : 0
+MLK  with AQI : 0
+Harvard Yards  with AQI : 0
+Mark Twain SP  with AQI : 0
+Elkhart-Prairie St.  with AQI : 0
+St Theodosius  with AQI : 0
+South DeKalb  with AQI : 0
+Harvard Yards  with AQI : 0
+Mark Twain SP  with AQI : 0
+Elkhart-Prairie St.  with AQI : 0
+St Theodosius  with AQI : 0
+South DeKalb  with AQI : 0
+Harvard Yards  with AQI : 0
+Indpls-Washington Park  with AQI : 0
+Mesa 2  with AQI : 0
+WATSON  with AQI : 0
+MLK  with AQI : 0
+Harvard Yards  with AQI : 0
+Indpls-Washington Park  with AQI : 0
+Mesa 2  with AQI : 0
+WATSON  with AQI : 0
+MLK  with AQI : 0
+Harvard Yards  with AQI : 0
+Indpls-Washington Park  with AQI : 0
+Mesa 2  with AQI : 0
+WATSON  with AQI : 0
+MLK  with AQI : 0
+Harvard Yards  with AQI : 0
+Mark Twain SP  with AQI : 0
+Elkhart-Prairie St.  with AQI : 0
+St Theodosius  with AQI : 0
+South DeKalb  with AQI : 0
+Miami Jones Ranch  with AQI : 0
+Reno4  with AQI : 0
+Oakland West  with AQI : 0
+Welby - 78th Ave. & Steele St.  with AQI : 0
+BELLFNT2  with AQI : 0
+Harvard Yards  with AQI : 0
+Durango Complex  with AQI : 0
+Muscatin  with AQI : 0
+York Landfill  with AQI : 0
+Muscatin  with AQI : 0
+East HS  with AQI : 0
+Palatka  with AQI : 0
+West Yellowstone Park Ent #2  with AQI : 0
+St Theodosius  with AQI : 0
+Miami Jones Ranch  with AQI : 0

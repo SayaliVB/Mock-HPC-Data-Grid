@@ -3,12 +3,14 @@
 #include <sstream>
 #include <vector>
 #include <string>
-#include <mpi.h>
+#include "omp.h"
 #include <map>
 #include <dirent.h>
 
 
 int verbose = 1;
+
+#define NUM_THREADS 12
 
 struct AirQualityData {
     double latitude;
@@ -30,21 +32,6 @@ std::vector<std::string> find_files(const std::string& directory) {
     std::vector<std::string> filenames;
     DIR *dir;
     struct dirent *ent;
-    /*
-    if ((dir = opendir(directory.c_str())) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            std::string filename = ent->d_name;
-            if (filename.find("20200810-") == 0) {
-                filenames.push_back(directory + "/" + filename);
-            }
-        }
-        closedir(dir);
-    } else {
-        std::cerr << "Error opening directory: " << directory << std::endl;
-    }
-    */
-    
-
     if ((dir = opendir(directory.c_str())) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
             if (ent->d_type == DT_DIR) {
@@ -212,18 +199,6 @@ std::vector<AirQualityData> read_csv_data(const std::string& filename) {
     return data;
 }
 
-std::string extract_date(const std::string& filepath) { 
-    // Find the position of the last occurrence of '/'
-    size_t last_slash_pos = filepath.rfind('/');
-
-    size_t last_dot_pos = filepath.rfind('.');
-
-    // Extract the substring representing the date-time
-    std::string date_time = filepath.substr(last_slash_pos+1, last_dot_pos - last_slash_pos - 1);
-    
-    return date_time;
-}
-
 std::map<std::string, double> calculate_average(const std::vector<AirQualityData>& data) {
     std::map<std::string, double> sums;
     std::map<std::string, int> counts;
@@ -258,7 +233,7 @@ void write_to_file(std::string data){
 }
 
 void execution_time(int rank, double start, double end, int records, int totprocess) {
-    std::string filename = "execution_time_for_" + std::to_string(totprocess) + "_processes.txt";
+    std::string filename = "omp_execution_time_for_" + std::to_string(totprocess) + "_processes.txt";
     std::ofstream metrics(filename, std::ios::app);
     
     // Check if the file opened successfully
@@ -270,7 +245,7 @@ void execution_time(int rank, double start, double end, int records, int totproc
         double recordsPerSecond = records / duration;
         
         // Write the metrics to the file
-        metrics << "Process Rank: " << rank << ", Records processed: " << records <<", Execution time: " << duration << "s, Records per second: " << recordsPerSecond << std::endl;
+        metrics << "Thread ID: " << rank << ", Records processed: " << records <<", Execution time: " << duration << "s, Records per second: " << recordsPerSecond << std::endl;
         
         // Close the file
         metrics.close();
@@ -280,145 +255,66 @@ void execution_time(int rank, double start, double end, int records, int totproc
     }
 }
 
-
 int main(int argc, char *argv[]) {
-    MPI_Init(NULL, NULL);
-
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    //std::cout<<size;
-
-    if (size < 2) {
-        std::cerr << "This program needs at least 2 MPI processes." << std::endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
 
     std::map<std::string, double> partial_avgs;
-    if (rank == 0) {
-        // Rank 0 reads the filenames and sends them to other ranks
+   
 
-        std::string directory = argv[1];
-        
-        if (verbose > 2){
-            std::cout<<"Directory : " <<directory<< std::endl;
+    std::string directory = argv[1];
+    omp_set_num_threads(NUM_THREADS);
+
+    
+    if (verbose > 2){
+        std::cout<<"Directory : " <<directory<< std::endl;
+    }
+    std::vector<std::string> filenames;
+    filenames = find_files(directory);
+
+    if (verbose >4){
+        for (int i = 0; i < filenames.size(); ++i){
+            std::cout << "File " << i <<" "<< filenames[i]<<std::endl;
         }
-        std::vector<std::string> filenames;
-        filenames = find_files(directory);
+    }
+    
+    std::ofstream outfile("pollutant_avg.txt", std::ios::out);
+    outfile.close();
+    
 
-        std::cout << "Rank " << rank << " processed files " << filenames.size()  << std::endl;
+    #pragma omp parallel 
+    {
+        int id = omp_get_thread_num();
 
-        if (verbose >4){
-            for (int i = 0; i < filenames.size(); ++i){
-                std::cout << "File " << i <<" "<< filenames[i]<<std::endl;
-            }
-        }
-
-        // Send filenames to other ranks
-        for (int i = 1; i < size ; ++i) {
-            MPI_Send(filenames[i-1].c_str(), filenames[i-1].size() + 1, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-            if (verbose >3)
-                std::cout << "Rank 0 sent file " << filenames[i-1] << "to  "<< i << std::endl;
-        }
-        
-        std::ofstream outfile("pollutant_avg.txt", std::ios::out);
-        outfile.close();
-
-        
-        for (int i = size-1; i < filenames.size(); ++i) {
-            int ranktosend;
-            MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
-
-            write_to_file(serialized_data);
-
-            if (verbose >3)
-                std::cout << "Rank 0 remaining sending file " << filenames[i] << "to  "<< ranktosend << std::endl;
-            MPI_Send(filenames[i].c_str(), filenames[i].size() + 1, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD);
-        }
-        // Signal termination to other processes
-        for (int i = 1; i < size; ++i) {
-            int ranktosend;
-            MPI_Recv(&ranktosend, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            int size;
-            MPI_Recv(&size, 1, MPI_INT, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            
-            // Receive the serialized data
-            char* cstr_data = new char[size];
-            MPI_Recv(cstr_data, size, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            std::string serialized_data(cstr_data, size);
-
-            write_to_file(serialized_data);
-
-            if (verbose >3)
-                std::cout << "Rank 0 sending empty file to  "<< ranktosend << std::endl;
-            char empty_filename[1] = {'\0'};
-            MPI_Send(empty_filename, 1, MPI_CHAR, ranktosend, 0, MPI_COMM_WORLD);
-            if (verbose >3)
-                std::cout << "Rank 0 sent empty file to  "<< ranktosend << std::endl;
-        }
-
-        
-    } else{
-        int i =0;
         int totRecords = 0;
         auto startTime = std::chrono::high_resolution_clock::now();
-        // Receive filenames and process the corresponding files
-        while(true){
-            char filename[256];
-            MPI_Recv(&filename, 256, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            if (verbose> 3 && filename[0] == '\0'){
-                std::cout << " recieved file " << filename << std::endl;
-            }
-            if (filename[0] == '\0') // Termination signal
-            {
-                auto endTime = std::chrono::high_resolution_clock::now();
-                execution_time(rank,  
-                                std::chrono::duration<double>(startTime.time_since_epoch()).count(),  
-                                std::chrono::duration<double>(endTime.time_since_epoch()).count(), 
-                                totRecords, size);
-                break;
-            }
-
+        for (int i = id; i < filenames.size(); i+=NUM_THREADS) {
+            std::string filename = filenames[i];
             std::vector<AirQualityData> data = read_csv_data(std::string(filename));
-
+            
+            
             // Process the data (example: print the number of entries)
             if (verbose>1){
-                std::cout << "Rank " << rank << " processed file " << filename << ". Number of entries: "<< data.size() << std::endl;
+                std::cout << "ID " << id << " processed file " << filename << ". Number of entries: "<< data.size() << std::endl;
             }
 
             totRecords+=data.size();
             partial_avgs = calculate_average(data);
-            
-            
-            MPI_Send(&rank, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            std::string serialized_data;
-            serialized_data +="Average concentration for date " + extract_date(filename) + "\n";
-            for (const auto& pair : partial_avgs) {
-                serialized_data += pair.first + ":" + std::to_string(pair.second) + "\n";
-            }
-            int size = serialized_data.size();
-            MPI_Send(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-
-            const char* cstr_data = serialized_data.c_str();
-            MPI_Send(cstr_data, size, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-            i++;
         }
-
+        auto endTime = std::chrono::high_resolution_clock::now();
+        execution_time(id,  
+                std::chrono::duration<double>(startTime.time_since_epoch()).count(),  
+                std::chrono::duration<double>(endTime.time_since_epoch()).count(), 
+                totRecords, NUM_THREADS);   
     }
-    
-    MPI_Finalize();
+
+    double total_average = 0.0;
+    for (std::map<std::string, double>::iterator it = partial_avgs.begin(); it != partial_avgs.end(); ++it) {
+        total_average += it->second;
+    }
+    total_average /= filenames.size(); // Divide by the number of files
+
+    std::cout << "Total average: " << total_average << std::endl;
+
     return 0;
+    
 }
+

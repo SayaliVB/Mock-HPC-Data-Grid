@@ -7,7 +7,7 @@
 #include <dirent.h>
 
 
-int verbose = 3;
+int verbose = 1;
 
 struct AirQualityData {
     double latitude;
